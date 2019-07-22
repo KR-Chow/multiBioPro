@@ -11,6 +11,7 @@ __version__ = "v1.0"
 import sys
 import os
 import re
+import copy
 from multiBioPro import MultiSys
 from collections import defaultdict
 
@@ -26,92 +27,102 @@ from collections import defaultdict
 saveAccepts = ['list', 'string']
 
 
-def ToBed12(file, fileType='gff3', genePattern='gene', txPattern='transcript', identifier='ID,Parent', save='list'):
+def ToBed12(Object, formatType='gff3', genePattern='gene', txPattern='transcript', identifier='ID,Parent', save='list'):
     MultiSys.AcceptArgs(save, *saveAccepts)
     geneDict, txDict = MainParser(
-        file, fileType, genePattern, txPattern, identifier)
+        Object, formatType, genePattern, txPattern, identifier)
     return DictParser(mode='bed12', feature='tx', save=save, **txDict)
 
 
-def ToBed6(file, fileType='gff3', feature='gene', genePattern='gene', txPattern='transcript', identifier='ID,Parent', save='list'):
+def ToBed6(Object, formatType='gff3', feature='gene', genePattern='gene', txPattern='transcript', identifier='ID,Parent', save='list'):
     MultiSys.AcceptArgs(save, *saveAccepts)
     geneDict, txDict = MainParser(
-        file, fileType, genePattern, txPattern, identifier)
+        Object, formatType, genePattern, txPattern, identifier)
     if feature == 'gene':
         return DictParser(mode='bed6', feature=feature, save=save, **geneDict)
     else:
         return DictParser(mode='bed6', feature=feature, save=save, **txDict)
 
 
-def FormatParser(attribute, fileType):
+def FormatParser(attribute, formatType):
     formatDict = defaultdict(dict)
     listA = []
-    if fileType == 'gff3':
+    if formatType == 'gff3':
         listA = re.split('=|;', attribute)
-    elif fileType == 'gtf':
+    elif formatType == 'gtf':
         listA = re.split('\s"|";\s', attribute)
     return MultiSys.List2Dict(listA)
 
 
-def MainParser(file, fileType, genePattern, txPattern, identifier):
+def MainParser(Object, formatType, genePattern, txPattern, identifier):
     genePatternList = genePattern.split(',')
     txPatternList = txPattern.split(',')
     parserGeneDict = defaultdict(dict)
     parserTxDict = defaultdict(dict)
-    with open(file, 'r') as f:
-        for line in f.readlines():
-            if re.search('^#+?', line) is not None:
-                continue
-            lineContList = line.rstrip('\n').split('\t')
-            feature = lineContList[2]  # gene, transcript, exon, CDS...
-            if feature == 'chromosome':
-                continue
-            chrom = lineContList[0]
-            chrStart = int(lineContList[3]) - 1
-            chrEnd = int(lineContList[4])
-            strand = lineContList[6]
-            attributeDict = FormatParser(lineContList[-1], fileType)
-            parentID = idPattern = ''
-
-            if fileType == 'gff3':
-                idPattern, parentPattern = identifier.split(',')
-                if feature == 'CDS' or feature == 'exon':
-                    parentID = attributeDict[parentPattern]
-                elif feature in txPatternList:
-                    parentID = attributeDict[parentPattern]
-                    idAttribute = attributeDict[idPattern]
-                elif feature in genePatternList:
-                    idAttribute = attributeDict[idPattern]
-                else:
-                    continue
-            elif fileType == 'gtf':
-                geneID, transcriptID = identifier.split(',')
-                if feature == 'CDS' or feature == 'exon':
-                    parentID = attributeDict[transcriptID]
-                elif feature in txPatternList:
-                    idAttribute = attributeDict[transcriptID]
-                    parentID = attributeDict[geneID]
-                elif feature in genePatternList:
-                    idAttribute = attributeDict[geneID]
-                else:
-                    continue
-
-            if feature in genePatternList:
-                parserGeneDict[idAttribute] = [chrom, chrStart, chrEnd, strand]
+    lineList = list()
+    #
+    if isinstance(Object, str):
+        with open(Object, 'r') as f:
+            lineList = f.readlines()
+    elif isinstance(Object, list):
+        lineList = copy.copy(Object)
+    else:
+        MultiSys.Error(['Unkown object type!'])
+    #
+    annoRegex = re.compile(r'(^#.*)|(^$)')
+    for line in lineList:
+        if annoRegex.search(line) is not None:
+            continue
+        contList = line.rstrip('\n').split('\t')
+        feature = contList[2]  # gene, transcript, exon, CDS...
+        if feature == 'chromosome':
+            continue
+        chrom = contList[0]
+        chrStart = int(contList[3]) - 1
+        chrEnd = int(contList[4])
+        strand = contList[6]
+        attributeDict = FormatParser(contList[-1], formatType)
+        parentID = idPattern = ''
+        #
+        if formatType == 'gff3':
+            idPattern, parentPattern = identifier.split(',')
+            if feature == 'CDS' or feature == 'exon':
+                parentID = attributeDict[parentPattern]
             elif feature in txPatternList:
-                parserTxDict[idAttribute]['tx'] = [
-                    chrom, chrStart, chrEnd, strand]
-                parserTxDict[idAttribute]['pa'] = parentID
+                parentID = attributeDict[parentPattern]
+                idAttribute = attributeDict[idPattern]
+            elif feature in genePatternList:
+                idAttribute = attributeDict[idPattern]
             else:
-                # if feature not in parserTxDict.get(parentID, {}):
-                if feature not in parserTxDict[parentID]:
-                    parserTxDict[parentID].setdefault(feature, {}).setdefault(
-                        's', []).append(chrStart)
-                    parserTxDict[parentID][feature].setdefault(
-                        'e', []).append(chrEnd)
-                else:
-                    parserTxDict[parentID][feature]['s'].append(chrStart)
-                    parserTxDict[parentID][feature]['e'].append(chrEnd)
+                continue
+        elif formatType == 'gtf':
+            geneID, transcriptID = identifier.split(',')
+            if feature == 'CDS' or feature == 'exon':
+                parentID = attributeDict[transcriptID]
+            elif feature in txPatternList:
+                idAttribute = attributeDict[transcriptID]
+                parentID = attributeDict[geneID]
+            elif feature in genePatternList:
+                idAttribute = attributeDict[geneID]
+            else:
+                continue
+        #
+        if feature in genePatternList:
+            parserGeneDict[idAttribute] = [chrom, chrStart, chrEnd, strand]
+        elif feature in txPatternList:
+            parserTxDict[idAttribute]['tx'] = [
+                chrom, chrStart, chrEnd, strand]
+            parserTxDict[idAttribute]['pa'] = parentID
+        else:
+            # if feature not in parserTxDict.get(parentID, {}):
+            if feature not in parserTxDict[parentID]:
+                parserTxDict[parentID].setdefault(feature, {}).setdefault(
+                    's', []).append(chrStart)
+                parserTxDict[parentID][feature].setdefault(
+                    'e', []).append(chrEnd)
+            else:
+                parserTxDict[parentID][feature]['s'].append(chrStart)
+                parserTxDict[parentID][feature]['e'].append(chrEnd)
     return (parserGeneDict, parserTxDict)
 
 
@@ -193,30 +204,11 @@ def DictParser(mode, feature, save, **paserDict):
     return(bedDict)
 
 
-def Test(file, fileType, genePattern, txPattern, identifier):
-    bedDict = ToBed12(file, fileType, genePattern, txPattern, identifier)
-    count = 0
-    for x in sorted(bedDict.keys()):
-        if count == 0:
-            print(bedDict[x])
-        else:
-            break
-        count += 1
-
+def Test():
+    file = sys.argv[1]
+    bedDict = ToBed12(file, save='string')
+    for x in range(bedList):
+        print(bedDict[x])
 
 if __name__ == '__main__':
-    fileType = input('Your file format(gff3/gtf):')
-    if fileType == '' or fileType not in ['gff3', 'gtf']:
-        fileType = 'gff3'
-    file = input('Input the test ' + fileType + ' file:')
-    if file == '':
-        file = '/data/zhoukr/reference/genome/gff3/Oryza_sativa.IRGSP-1.0.37.chr.gff3'
-    if file == '/data/zhoukr/reference/genome/gff3/Oryza_sativa.IRGSP-1.0.37.chr.gff3':
-        Test(file, fileType=fileType, genePattern='gene',
-             txPattern='mRNA,ncRNA,lnc_RNA,pre_miRNA,RNase_MRP_RNA,rRNA,snoRNA,snRNA,SRP_RNA,tRNA', identifier='ID,Parent')
-    elif fileType == 'gff3':
-        Test(file, fileType=fileType, genePattern='gene',
-             txPattern='transcript', identifier='ID,Parent')
-    elif fileType == 'gtf':
-        Test(file, fileType=fileType, genePattern='gene',
-             txPattern='transcript', identifier='gene_id,transcript_id')
+    Test()
