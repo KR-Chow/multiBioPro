@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 ##########################################
-#     handle the bed format data         #
+#     handle the bed format row data     #
 #          2020.2.19                     #
 ##########################################
 __author__ = "K.R.Chow"
