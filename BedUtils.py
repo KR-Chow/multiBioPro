@@ -20,12 +20,10 @@ class creatbed(object):
         self.clear = True
         self.name, self.score, self.bcount, self.bsize, self.bstart = [None for i in range(5)]
         self.strand = '.'
-        
         try:
             self.chr, self.start, self.end = row[0:3]
         except IndexError as e:
             self.clear = False
-        
         if len(row) == 4:
             self.score = row[3]
         elif len(row) == 5:
@@ -41,7 +39,6 @@ class creatbed(object):
                 self.bstart = [int(i) for i in row[11].strip(',').split(',') if i]
             except ValueError as e:
                 self.clear = False
-
     # check bed
     def check(self):
         if self.clear:
@@ -49,18 +46,15 @@ class creatbed(object):
                 self.start = int(self.start)
             except (ValueError, TypeError) as e:
                 self.clear = False
-            
             try:
                 self.end = int(self.end)
             except (ValueError, TypeError) as e:
                 self.clear = False
-            
             try:
                 if self.score is not None:
                     self.score = float(self.score)
             except ValueError as e:
                 self.clear = False
-            
             try:
                 if self.strand not in ['+', '-', '.']:
                     self.clear = False
@@ -73,12 +67,11 @@ class creatbed(object):
             except TypeError as e:
                 self.clear = False
         return self
-
     # decode bed12 to [ [exonblocks], [intronblocks] ] for ncRNA,
     # [ [exonblocks], [intronblocks], [ [5'utrs], [thicks], [3'utrs] ] ] for protein-coding
     # only return genomic interval in self.code
     # intronList will be empty if no intron
-    # strand is consider
+    # strand is taken into consideration
     def decode(self):
         ## used for test
         ## row = ['chr1','8423769','8424898','ENST00000464367','1000','-','8423770', '8424810','0','2','546,93,','0,1036,']
@@ -86,7 +79,7 @@ class creatbed(object):
             # 0-based
             distance = min(a[1], b[1]) - max(a[0], b[0])
             return max(0, distance)
-
+        ## main code
         self.code = None
         if self.check().clear:
             blockList = list(map(lambda x,y:[x + self.start, x + self.start + y],
@@ -167,16 +160,17 @@ class bedops(object):
         # if tss (transcription start site) is set True, take locus-B as genomic locus, a as RNA-type locus
         # tss will ignore self.strand
         # center only work with tss
+        tssFlag, centerFlag = tss, center
         self.distance = None
-        if tss:
+        if tssFlag:
             self.strand = False
         if self.check().clear:
-            overlapLength = self.intersect().overlap
+            overlapLength = self.intersect().ilength
             if overlapLength > 0:
                 distance = 0
             else:
-                if tss:
-                    if center:
+                if tssFlag:
+                    if centerFlag:
                         peak = int((self.b.end + self.b.start) / 2)
                         distance = (peak - self.a.end) if self.a.strand == '-' else (peak - self.a.start)
                     else:
@@ -195,23 +189,23 @@ class bedops(object):
     # calcualte intersection length of intervals
     def intersect(self):
         # 0-based, return 0 if no overlap
-        self.overlap = None
+        self.ilength, self.ilocus, self.ifracA, self.ifracB = [None for i in range(4)]
         if self.check().clear:
             length = min(self.a.end, self.b.end) - max(self.a.start, self.b.start)
-            self.overlap = max(0, length)
-            self.fracA = length / (self.a.end - self.a.start)
-            self.fracB = length / (self.b.end - self.b.start)
-            self.ilocus = None
-            if self.overlap > 0:
+            self.ilength = max(0, length)
+            self.ifracA = length / (self.a.end - self.a.start)
+            self.ifracB = length / (self.b.end - self.b.start)
+            if self.ilength > 0:
                 self.ilocus = [max(self.a.start, self.b.start), min(self.a.end, self.b.end)]
         return self
     # merge intervals
     def merge(self, d=0):
+        setDistance = d
         self.mlocus = None
         if self.check().clear:
-            overlapLength = self.intersect().overlap
+            overlapLength = self.intersect().ilength
             distance = abs(self.discompute().distance)
-            if overlapLength > 0 or distance <= d:
+            if overlapLength > 0 or distance <= setDistance:
                 chrom = self.a.chr
                 name = ':'.join([self.a.name, self.b.name])
                 score = self.a.score + self.b.score
@@ -226,4 +220,31 @@ class bedops(object):
         return self
     # calculate the information of how a include b (required intersections)
     def include(self):
-        pass
+        #cloverh: left overhang of locusB, croverh: right overhang of locusB
+        self.cloverh = None
+        self.croverh = None
+        self.cshort = None
+        if self.check().clear:
+            intersectObj = self.intersect()
+            overlapLength = intersectObj.ilength
+            locusbLength = self.b.end - self.b.start
+            if overlapLength > 0:
+                cloverh = self.a.start - self.b.start
+                croverh = self.b.end - self.a.end
+                if self.strand:
+                    if self.a.strand == '-':
+                        cloverh, croverh = croverh, cloverh
+                if cloverh <= 0:
+                    if croverh <= 0:
+                        cshort = 'complete'
+                    else:
+                        cshort = 'right'
+                else:
+                    if croverh <= 0:
+                        cshort = 'left'
+                    else:
+                        cshort = 'overlay'
+                self.cloverh = cloverh
+                self.croverh = croverh
+                self.cshort = cshort
+        return self
