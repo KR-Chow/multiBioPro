@@ -207,7 +207,7 @@ class bedops(object):
         return self
     # merge intervals
     def merge(self, d=0):
-        self.locus = None
+        self.mlocus = None
         if self.check().clear:
             overlapLength = self.intersect().overlap
             distance = abs(self.discompute().distance)
@@ -219,10 +219,10 @@ class bedops(object):
                     strand = self.a.strand
                 else:
                     strand = '.'
-                locus = [chrom, min(self.a.start, self.b.start), max(self.a.end, self.b.end), name, score, strand]
+                mlocus = [chrom, min(self.a.start, self.b.start), max(self.a.end, self.b.end), name, score, strand]
             else:
-                locus = None
-            self.locus = locus
+                mlocus = None
+            self.mlocus = mlocus
         return self
     # calculate the information of how a include b (required intersections)
     def include(self):
