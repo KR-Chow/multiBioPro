@@ -7,14 +7,6 @@
 __author__ = "K.R.Chow"
 __version__ = "v1.0"
 
-import sys, os
-
-class raiseErr(object):
-    def __init__(self, message, exit=True):
-        sys.stderr.write(message)
-        if bool(exit):
-            sys.exit()
-
 class creatbed(object):
     def __init__(self, row):
         self.clear = True
