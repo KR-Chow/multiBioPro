@@ -15,7 +15,7 @@ class raiseErr(object):
         if bool(exit):
             sys.exit()
 
-class creatBed(object):
+class creatbed(object):
     def __init__(self, row):
         self.clear = True
         self.name, self.score, self.bcount, self.bsize, self.bstart = [None for i in range(5)]
@@ -146,8 +146,8 @@ class bedops(object):
     # a:bed locus-A, b:bed locus-B
     # s:strand, d:distance
     def __init__(self, a, b, s=False):
-        self.a = creatBed(a)
-        self.b = creatBed(b)
+        self.a = creatbed(a)
+        self.b = creatbed(b)
         self.strand = s
         self.clear = True
     # check intervals
