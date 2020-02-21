@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 ##########################################
 #     handle the bed format row data     #
@@ -232,7 +231,7 @@ class bedops(object):
                     else:
                         cshort = 'right'
                 else:
-                    if croverh <= 0:
+                    if croverh < 0:
                         cshort = 'left'
                     else:
                         cshort = 'overlay'
