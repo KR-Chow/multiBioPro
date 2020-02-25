@@ -9,19 +9,20 @@ __version__ = "v1.0"
 class creatbed(object):
     def __init__(self, row):
         self.clear = True
+        self.number = len(row)
         self.name, self.score, self.bcount, self.bsize, self.bstart = [None for i in range(5)]
         self.strand = '.'
         try:
             self.chr, self.start, self.end = row[0:3]
         except IndexError as e:
             self.clear = False
-        if len(row) == 4:
+        if self.number == 4:
             self.score = row[3]
-        elif len(row) == 5:
+        elif self.number == 5:
             self.name, self.score = row[3:5]
-        elif len(row) >= 6:
+        elif self.number >= 6:
             self.name, self.score, self.strand = row[3:6]
-        if len(row) >= 12:
+        if self.number >= 12:
             try:
                 self.tstart = int(row[6])
                 self.tend = int(row[7])
@@ -35,16 +36,11 @@ class creatbed(object):
         if self.clear:
             try:
                 self.start = int(self.start)
-            except (ValueError, TypeError) as e:
-                self.clear = False
-            try:
                 self.end = int(self.end)
-            except (ValueError, TypeError) as e:
-                self.clear = False
-            try:
+                self.length = self.end - self.start
                 if self.score is not None:
                     self.score = float(self.score)
-            except ValueError as e:
+            except (ValueError, TypeError) as e:
                 self.clear = False
             try:
                 if self.strand not in ['+', '-', '.']:
@@ -57,6 +53,10 @@ class creatbed(object):
                     self.clear = True
             except TypeError as e:
                 self.clear = False
+        if self.clear:
+            return self
+        else:
+            raise SystemExit("Error when passing row! Please pass bed-like row to creatbed!")
         return self
     # decode bed12 to [ [exonblocks], [intronblocks] ] for ncRNA,
     # [ [exonblocks], [intronblocks], [ [5'utrs], [thicks], [3'utrs] ] ] for protein-coding
@@ -144,17 +144,22 @@ class bedops(object):
                     self.clear = False
         else:
             self.clear = False
-        return self
+        if self.clear:
+            return self
+        else:
+            emessage = "Error when passing rows!\nHere are some reasons:\n1.Not bed format;\n2.Not on the same chromosome;\n"
+            emessage += "3.Not the same strand when s=True)"
+            raise SystemExit(emessage)
+
     # calculate distance between intervals
     def discompute(self, tss=False, center=False):
-        # return distance ralative to a
-        # if tss (transcription start site) is set True, take locus-B as genomic locus, a as RNA-type locus
+        # tss=False, return distance ralative to genome (b to a), ignore strand
+        # tss=True (transcription start site), take locus-B as genomic locus, a as RNA-type locus
         # tss will ignore self.strand
         # center only work with tss
         tssFlag, centerFlag = tss, center
         self.distance = None
-        if tssFlag:
-            self.strand = False
+        self.strand = False
         if self.check().clear:
             overlapLength = self.intersect().ilength
             if overlapLength > 0:
@@ -174,12 +179,12 @@ class bedops(object):
                 else:
                     distance = min(abs(self.b.start - self.a.end + 1), abs(self.b.end - self.a.start))
                     if self.b.end <= self.a.start: distance = -distance
-                    if self.strand and self.a.strand == '-': distance = -distance
             self.distance = distance
         return self
     # calcualte intersection length of intervals
     def intersect(self):
         # 0-based, return 0 if no overlap
+        # sensitive to strand
         self.ilength, self.ilocus, self.ifracA, self.ifracB = [None for i in range(4)]
         if self.check().clear:
             length = min(self.a.end, self.b.end) - max(self.a.start, self.b.start)
@@ -187,55 +192,64 @@ class bedops(object):
             self.ifracA = length / (self.a.end - self.a.start)
             self.ifracB = length / (self.b.end - self.b.start)
             if self.ilength > 0:
-                self.ilocus = [max(self.a.start, self.b.start), min(self.a.end, self.b.end)]
+                name = ':'.join([self.a.name, self.b.name])
+                score = max(self.a.score, self.b.score)
+                if self.strand:
+                    strand = self.a.strand
+                else:
+                    strand = '.'
+                self.ilocus = [self.a.chr, max(self.a.start, self.b.start), min(self.a.end, self.b.end), name, score, strand]
         return self
     # merge intervals
     def merge(self, d=0):
+        # if s=False, return strand with '.' when a and b has different orientations
         setDistance = d
         self.mlocus = None
         if self.check().clear:
             overlapLength = self.intersect().ilength
             distance = abs(self.discompute().distance)
             if overlapLength > 0 or distance <= setDistance:
-                chrom = self.a.chr
                 name = ':'.join([self.a.name, self.b.name])
                 score = self.a.score + self.b.score
                 if self.strand:
                     strand = self.a.strand
                 else:
                     strand = '.'
-                mlocus = [chrom, min(self.a.start, self.b.start), max(self.a.end, self.b.end), name, score, strand]
+                mlocus = [self.a.chr, min(self.a.start, self.b.start), max(self.a.end, self.b.end), name, score, strand]
             else:
                 mlocus = None
             self.mlocus = mlocus
         return self
     # calculate the information of how a include b (required intersections)
     def include(self):
+        # calculate how a include b
+        # self.strand not work
         #cloverh: left overhang of locusB, croverh: right overhang of locusB
+        self.strand = False
         self.cloverh = None
         self.croverh = None
-        self.cshort = None
+        self.ctype = None
         if self.check().clear:
             intersectObj = self.intersect()
             overlapLength = intersectObj.ilength
             locusbLength = self.b.end - self.b.start
             if overlapLength > 0:
-                cloverh = self.a.start - self.b.start
+                cloverh = self.b.start - self.a.start
                 croverh = self.b.end - self.a.end
                 if self.strand:
                     if self.a.strand == '-':
                         cloverh, croverh = croverh, cloverh
-                if cloverh <= 0:
+                if cloverh >= 0:
                     if croverh <= 0:
-                        cshort = 'complete'
+                        ctype = 'complete'
                     else:
-                        cshort = 'right'
+                        ctype = 'right'
                 else:
                     if croverh < 0:
-                        cshort = 'left'
+                        ctype = 'left'
                     else:
-                        cshort = 'overlay'
+                        ctype = 'overlay'
                 self.cloverh = cloverh
                 self.croverh = croverh
-                self.cshort = cshort
+                self.ctype = ctype
         return self
