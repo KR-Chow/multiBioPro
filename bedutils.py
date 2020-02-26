@@ -225,6 +225,7 @@ class bedops(object):
         # calculate how a include b
         # self.strand not work
         #cloverh: left overhang of locusB, croverh: right overhang of locusB
+        # ctype:0->complete, 1->right, -1->left, 2->overlay
         self.strand = False
         self.cloverh = None
         self.croverh = None
@@ -236,19 +237,16 @@ class bedops(object):
             if overlapLength > 0:
                 cloverh = self.b.start - self.a.start
                 croverh = self.b.end - self.a.end
-                if self.strand:
-                    if self.a.strand == '-':
-                        cloverh, croverh = croverh, cloverh
                 if cloverh >= 0:
                     if croverh <= 0:
-                        ctype = 'complete'
+                        ctype = 0
                     else:
-                        ctype = 'right'
+                        ctype = 1
                 else:
                     if croverh < 0:
-                        ctype = 'left'
+                        ctype = -1
                     else:
-                        ctype = 'overlay'
+                        ctype = 2
                 self.cloverh = cloverh
                 self.croverh = croverh
                 self.ctype = ctype
