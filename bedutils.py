@@ -8,7 +8,7 @@ __version__ = "v1.0"
 
 import random
 
-class creatbed(object):
+class buildbed(object):
     def __init__(self, row):
         self.clear = True
         self.number = len(row)
@@ -60,7 +60,7 @@ class creatbed(object):
         if self.clear:
             return self
         else:
-            raise SystemExit("Error when passing row! Please pass bed-like row to creatbed!")
+            raise SystemExit("Error when passing row! Please pass bed-like row to buildbed!")
         return self
 
     # strand is taken into consideration
@@ -138,8 +138,8 @@ class bedops(object):
     # a:bed locus-A, b:bed locus-B
     # s:strand, d:distance
     def __init__(self, a, b, s=False):
-        self.a = creatbed(a)
-        self.b = creatbed(b)
+        self.a = buildbed(a)
+        self.b = buildbed(b)
         self.strand = s
         self.clear = True
     # check intervals
