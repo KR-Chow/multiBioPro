@@ -62,7 +62,6 @@ class buildbed(object):
         else:
             raise SystemExit("Error when passing row! Please pass bed-like row to buildbed!")
         return self
-
     # return coordinates are in bed format
     # strand is taken into consideration
     # if "-" strand, all coordinates were re-order by reversing
@@ -75,9 +74,11 @@ class buildbed(object):
     def decode(self):
         ## return overlap length
         def overlap(a, b):
-            # 0-based
             distance = min(a[1], b[1]) - max(a[0], b[0])
-            return max(0, distance)
+            if distance > 0:
+                return True
+            else:
+                return False
         ## main code
         self.exon = list()
         self.intron = list()
@@ -159,7 +160,14 @@ class bedops(object):
             emessage = "Error when passing rows!\nHere are some reasons:\n1.Not bed format;\n2.Not on the same chromosome;\n"
             emessage += "3.Not the same strand when s=True)"
             raise SystemExit(emessage)
-
+    # return True if a overlap with b
+    def overlap(self):
+        if self.check().clear:
+            distance = min(self.a.end, self.b.end) - max(self.a.start, self.b.start)
+            if distance > 0:
+                return True
+            else:
+                return False
     # calculate distance between intervals
     def discompute(self, tss=False, center=False):
         # tss=False, return distance ralative to genome (b to a), ignore strand
