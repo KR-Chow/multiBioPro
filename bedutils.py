@@ -95,8 +95,8 @@ class buildbed(object):
             if self.tstart == self.tend:
                 ## for non-coding transcript
                 if self.strand == '-':
-                    self.exon = self.exon.reverse()
-                    self.intron = self.intron.reverse()
+                    self.exon.reverse()
+                    self.intron.reverse()
             else:
                 ## for protein-coding transcript
                 tstartLocus = [self.tstart, self.tstart + 1]
@@ -126,11 +126,11 @@ class buildbed(object):
                             self.utr3.append([self.tend, blockEnd])
                     else:
                         self.utr3.append([blockStart, blockEnd])
-            if self.strand == '-':
-                self.utr5, self.utr3 = self.utr3, self.utr5
-                tempList = [self.exon, self.intron, self.cds, self.utr5, self.utr3]
-                for coord in tempList:
-                    coord.reverse()
+                if self.strand == '-':
+                    self.utr5, self.utr3 = self.utr3, self.utr5
+                    tempList = [self.exon, self.intron, self.cds, self.utr5, self.utr3]
+                    for coord in tempList:
+                        coord.reverse()
         return self
 
 # bed operations on 2 bed6 format row
