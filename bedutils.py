@@ -63,6 +63,7 @@ class buildbed(object):
             raise SystemExit("Error when passing row! Please pass bed-like row to buildbed!")
         return self
 
+    # return coordinates are in bed format
     # strand is taken into consideration
     # if "-" strand, all coordinates were re-order by reversing
     # row = ['chr1','8423769','8424898','ENST00000464367','1000','-','8423770', '8424810','0','2','546,93,','0,1036,']
