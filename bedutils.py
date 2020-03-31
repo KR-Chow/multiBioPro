@@ -6,11 +6,15 @@
 __author__ = "K.R.Chow"
 __version__ = "v1.0"
 
+import random
+
 class creatbed(object):
     def __init__(self, row):
         self.clear = True
         self.number = len(row)
-        self.name, self.score, self.bcount, self.bsize, self.bstart = [None for i in range(5)]
+        self.name = str(random.randrange(100000))
+        self.score = 0
+        self.bcount, self.bsize, self.bstart = [None for i in range(3)]
         self.strand = '.'
         try:
             self.chr, self.start, self.end = row[0:3]
@@ -58,71 +62,75 @@ class creatbed(object):
         else:
             raise SystemExit("Error when passing row! Please pass bed-like row to creatbed!")
         return self
-    # decode bed12 to [ [exonblocks], [intronblocks] ] for ncRNA,
-    # [ [exonblocks], [intronblocks], [ [5'utrs], [thicks], [3'utrs] ] ] for protein-coding
-    # only return genomic interval in self.code
-    # intronList will be empty if no intron
+
     # strand is taken into consideration
+    # if "-" strand, all coordinates were re-order by reversing
+    # row = ['chr1','8423769','8424898','ENST00000464367','1000','-','8423770', '8424810','0','2','546,93,','0,1036,']
+    # self.exon = [[8424805, 8424898], [8423769, 8424315]]
+    # self.exon = [[8424315, 8424805]]
+    # self.exon = [[8424805, 8424810], [8423770, 8424315]]
+    # self.exon = [[8424810, 8424898]]
+    # self.exon = [[8423769, 8423770]]
     def decode(self):
-        ## used for test
-        ## row = ['chr1','8423769','8424898','ENST00000464367','1000','-','8423770', '8424810','0','2','546,93,','0,1036,']
+        ## return overlap length
         def overlap(a, b):
             # 0-based
             distance = min(a[1], b[1]) - max(a[0], b[0])
             return max(0, distance)
         ## main code
-        self.code = None
+        self.exon = list()
+        self.intron = list()
+        self.cds = list()
+        self.utr5 = list()
+        self.utr3 = list()
         if self.check().clear:
-            blockList = list(map(lambda x,y:[x + self.start, x + self.start + y],
+            self.exon = list(map(lambda x,y:[x + self.start, x + self.start + y],
                 self.bstart, self.bsize))
-            intronList = list()
-            if len(blockList) > 1:
-                for i in range(len(blockList) - 1):
+            self.intron = list()
+            if len(self.exon) > 1:
+                for i in range(len(self.exon) - 1):
                     ## [exon.end, next.exon.start]
-                    intronList.append([blockList[i][1], blockList[i+1][0]])
+                    self.intron.append([self.exon[i][1], self.exon[i+1][0]])
+            ## thick start and thick end
             if self.tstart == self.tend:
+                ## for non-coding transcript
                 if self.strand == '-':
-                    blockList = blockList.reverse()
-                    intronList = intronList.reverse()
-                decodeList = [blockList, intronList]
+                    self.exon = self.exon.reverse()
+                    self.intron = self.intron.reverse()
             else:
                 ## for protein-coding transcript
-                decodeList = [blockList, intronList, [[], [], []]]
-                thickStartLocus = [self.tstart, self.tstart + 1]
-                thickEndLocus = [self.tend - 1, self.tend]
-                ## return thick-start and thick-end exon index
-                thickStartBoolIndex = list(map(lambda x:overlap(thickStartLocus, x), blockList)).index(1)
-                thickEndBoolIndex = list(map(lambda x:overlap(thickEndLocus, x), blockList)).index(1)
-                for i in range(len(blockList)):
-                    blockStart = blockList[i][0]
-                    blockEnd = blockList[i][1]
-                    if i < thickStartBoolIndex:
-                        decodeList[-1][0].append([blockStart, blockEnd])
-                    elif i == thickStartBoolIndex:
+                tstartLocus = [self.tstart, self.tstart + 1]
+                tendLocus = [self.tend - 1, self.tend]
+                ## return exon index of thick-start and thick-end
+                tstartExon = list(map(lambda x:overlap(tstartLocus, x), self.exon)).index(1)
+                tendExon = list(map(lambda x:overlap(tendLocus, x), self.exon)).index(1)
+                for i in range(len(self.exon)):
+                    blockStart = self.exon[i][0]
+                    blockEnd = self.exon[i][1]
+                    if i < tstartExon:
+                        self.utr5.append([blockStart, blockEnd])
+                    elif i == tstartExon:
                         if self.tstart > blockStart:
-                            decodeList[-1][0].append([blockStart, self.tstart])
-                        if i == thickEndBoolIndex:
-                            decodeList[-1][1].append([self.tstart, self.tend])
+                            self.utr5.append([blockStart, self.tstart])
+                        if i == tendExon:
+                            self.cds.append([self.tstart, self.tend])
                             if self.tend < blockEnd:
-                                decodeList[-1][2].append([self.tend, blockEnd])
+                                self.utr3.append([self.tend, blockEnd])
                         else:
-                            decodeList[-1][1].append([self.tstart, blockEnd])
-                    elif i > thickStartBoolIndex and i < thickEndBoolIndex:
-                        decodeList[-1][1].append([blockStart, blockEnd])
-                    elif i == thickEndBoolIndex:
-                        decodeList[-1][1].append([blockStart, self.tend])
+                            self.cds.append([self.tstart, blockEnd])
+                    elif i > tstartExon and i < tendExon:
+                        self.cds.append([blockStart, blockEnd])
+                    elif i == tendExon:
+                        self.cds.append([blockStart, self.tend])
                         if self.tend < blockEnd:
-                            decodeList[-1][2].append([self.tend, blockEnd])
+                            self.utr3.append([self.tend, blockEnd])
                     else:
-                        decodeList[-1][2].append([blockStart, blockEnd])
+                        self.utr3.append([blockStart, blockEnd])
             if self.strand == '-':
-                for i in range(2):
-                    decodeList[i].reverse()
-                if self.tstart != self.tend:
-                    for i in range(3):
-                        decodeList[2][i].reverse()
-                    decodeList[2][0], decodeList[2][-1] = decodeList[2][-1], decodeList[2][0]
-            self.code = decodeList
+                self.utr5, self.utr3 = self.utr3, self.utr5
+                tempList = [self.exon, self.intron, self.cds, self.utr5, self.utr3]
+                for coord in tempList:
+                    coord.reverse()
         return self
 
 # bed operations on 2 bed6 format row
@@ -186,12 +194,14 @@ class bedops(object):
         # 0-based, return 0 if no overlap
         # sensitive to strand
         self.ilength, self.ilocus, self.ifracA, self.ifracB = [None for i in range(4)]
+        self.ibool = False
         if self.check().clear:
             length = min(self.a.end, self.b.end) - max(self.a.start, self.b.start)
             self.ilength = max(0, length)
-            self.ifracA = length / (self.a.end - self.a.start)
-            self.ifracB = length / (self.b.end - self.b.start)
             if self.ilength > 0:
+                self.ibool = True
+                self.ifracA = length / (self.a.end - self.a.start)
+                self.ifracB = length / (self.b.end - self.b.start)
                 name = ':'.join([self.a.name, self.b.name])
                 score = max(self.a.score, self.b.score)
                 if self.strand:
