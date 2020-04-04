@@ -35,6 +35,9 @@ class buildbed(object):
                 self.bstart = [int(i) for i in row[11].strip(',').split(',') if i]
             except ValueError as e:
                 self.clear = False
+        self.start = int(self.start)
+        self.end = int(self.end)
+        self.score =float(self.score)
     # check bed
     def check(self):
         if self.clear:
