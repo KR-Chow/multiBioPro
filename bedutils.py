@@ -1,35 +1,54 @@
 # -*- coding: utf-8 -*-
 ##########################################
 #     handle the bed format row data     #
-#          2020.2.19                     #
+#          2020.5.4                      #
 ##########################################
 __author__ = "K.R.Chow"
 __version__ = "v1.0"
 
 import random
 
+class bedinit(object):
+    def __init__(self, n=6):
+        self.chr = None
+        self.start = None
+        self.end = None
+        self.name = str(random.randrange(100000))
+        self.score = 0
+        self.strand = '.'
+        if n > 6:
+            self.tstart = None
+            self.tend = None
+            self.rgb = '255,0,0'
+            self.bcount = None
+            self.bsize = None
+            self.bstart = None
+
 class buildbed(object):
     def __init__(self, row):
         self.clear = True
-        self.number = len(row)
+        self.colnum = len(row)
         self.name = str(random.randrange(100000))
         self.score = 0
-        self.bcount, self.bsize, self.bstart = [None for i in range(3)]
         self.strand = '.'
+        self.bcount = None
+        self.bsize = None
+        self.bstart = None
         try:
             self.chr, self.start, self.end = row[0:3]
         except IndexError as e:
             self.clear = False
-        if self.number == 4:
+        if self.colnum == 4:
             self.score = row[3]
-        elif self.number == 5:
+        elif self.colnum == 5:
             self.name, self.score = row[3:5]
-        elif self.number >= 6:
+        elif self.colnum >= 6:
             self.name, self.score, self.strand = row[3:6]
-        if self.number >= 12:
+        if self.colnum >= 12:
             try:
                 self.tstart = int(row[6])
                 self.tend = int(row[7])
+                self.rgb = int(row[8])
                 self.bcount = int(row[9])
                 self.bsize = [int(i) for i in row[10].strip(',').split(',') if i]
                 self.bstart = [int(i) for i in row[11].strip(',').split(',') if i]
@@ -142,6 +161,7 @@ class buildbed(object):
 class bedops(object):
     # a:bed locus-A, b:bed locus-B
     # s:strand, d:distance
+    # retrun self.a self.b, self.i, self.m
     def __init__(self, a, b, s=False):
         self.a = buildbed(a)
         self.b = buildbed(b)
@@ -152,17 +172,12 @@ class bedops(object):
         if self.a.check().clear and self.b.check().clear:
             if self.a.chr != self.b.chr:
                 self.clear = False
-            if self.strand:
+            elif self.strand:
                 if self.a.strand != self.b.strand:
                     self.clear = False
         else:
             self.clear = False
-        if self.clear:
-            return self
-        else:
-            emessage = "Error when passing rows!\nHere are some reasons:\n1.Not bed format;\n2.Not on the same chromosome;\n"
-            emessage += "3.Not the same strand when s=True)"
-            raise SystemExit(emessage)
+        return self
     # return True if a overlap with b
     def overlap(self):
         if self.check().clear:
@@ -214,33 +229,40 @@ class bedops(object):
                 self.ibool = True
                 self.ifracA = length / (self.a.end - self.a.start)
                 self.ifracB = length / (self.b.end - self.b.start)
-                name = ':'.join([self.a.name, self.b.name])
                 score = max(self.a.score, self.b.score)
                 if self.strand:
                     strand = self.a.strand
                 else:
                     strand = '.'
-                self.ilocus = [self.a.chr, max(self.a.start, self.b.start), min(self.a.end, self.b.end), name, score, strand]
+                self.i = bedinit()
+                self.i.chr = self.a.chr
+                self.i.start = max(self.a.start, self.b.start)
+                self.i.end = min(self.a.end, self.b.end)
+                self.i.score = score
+                self.i.strand = strand
         return self
     # merge intervals
     def merge(self, d=0):
         # if s=False, return strand with '.' when a and b has different orientations
         setDistance = d
-        self.mlocus = None
+        self.mbool = False
         if self.check().clear:
             overlapLength = self.intersect().ilength
             distance = abs(self.discompute().distance)
             if overlapLength > 0 or distance <= setDistance:
+                self.mbool = True
                 name = ':'.join([self.a.name, self.b.name])
                 score = self.a.score + self.b.score
                 if self.strand:
                     strand = self.a.strand
                 else:
                     strand = '.'
-                mlocus = [self.a.chr, min(self.a.start, self.b.start), max(self.a.end, self.b.end), name, score, strand]
-            else:
-                mlocus = None
-            self.mlocus = mlocus
+                self.m = bedinit()
+                self.m.chr = self.a.chr
+                self.m.start = min(self.a.start, self.b.start)
+                self.m.end = max(self.a.end, self.b.end)
+                self.m.score = score
+                self.m.strand = strand
         return self
     # calculate the information of how a include b (required intersections)
     def include(self):
