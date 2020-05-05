@@ -234,7 +234,7 @@ class bedops(object):
                     strand = self.a.strand
                 else:
                     strand = '.'
-                self.i = initbed()
+                self.i = initbed(n=6)
                 self.i.chr = self.a.chr
                 self.i.start = max(self.a.start, self.b.start)
                 self.i.end = min(self.a.end, self.b.end)
@@ -257,7 +257,7 @@ class bedops(object):
                     strand = self.a.strand
                 else:
                     strand = '.'
-                self.m = initbed()
+                self.m = initbed(n=6)
                 self.m.chr = self.a.chr
                 self.m.start = min(self.a.start, self.b.start)
                 self.m.end = max(self.a.end, self.b.end)
