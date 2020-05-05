@@ -8,7 +8,7 @@ __version__ = "v1.0"
 
 import random
 
-class bedinit(object):
+class initbed(object):
     def __init__(self, n=6):
         self.chr = None
         self.start = None
@@ -234,7 +234,7 @@ class bedops(object):
                     strand = self.a.strand
                 else:
                     strand = '.'
-                self.i = bedinit()
+                self.i = initbed()
                 self.i.chr = self.a.chr
                 self.i.start = max(self.a.start, self.b.start)
                 self.i.end = min(self.a.end, self.b.end)
@@ -257,7 +257,7 @@ class bedops(object):
                     strand = self.a.strand
                 else:
                     strand = '.'
-                self.m = bedinit()
+                self.m = initbed()
                 self.m.chr = self.a.chr
                 self.m.start = min(self.a.start, self.b.start)
                 self.m.end = max(self.a.end, self.b.end)
