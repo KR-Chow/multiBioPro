@@ -174,6 +174,7 @@ class bedops(object):
     # retrun self.a self.b, self.i, self.m
     def __init__(self, a):
         self.a = buildbed(a)
+        self.list = self.a.list
         self.clear = self.a.clear
         if self.clear is False:
             raise SystemError("Input parameters could not pass the requirment!")
@@ -184,7 +185,7 @@ class bedops(object):
         else:
             self.clear = True
         ## check bed12 for self.a and self.b
-        if self.a.clear and self.b.clear:
+        if self.b.clear:
             if self.a.chr != self.b.chr:
                 self.clear = False
             elif self.strand:
@@ -346,6 +347,7 @@ class bed12ops(object):
     # retrun self.a self.b, self.i, self.m
     def __init__(self, a):
         self.a = buildbed(a)
+        self.list = self.a.list
         ## check bed12 for self.a
         self.clear = True
         if self.a.clear:
@@ -364,7 +366,7 @@ class bed12ops(object):
         else:
             self.clear = True
         ## check bed12 for self.a and self.b
-        if self.a.clear and self.b.clear:
+        if self.b.clear:
             if self.a.chr != self.b.chr:
                 self.clear = False
             elif self.strand:
@@ -397,10 +399,10 @@ class bed12ops(object):
             raise SystemError("Input parameters 'overlap' should be bool type.")
         ## raise errer when no overlaps found restricted by 'overlap'
         if self.__overlap and btype == 'exon':
-            for i in blockDict.keys():
-                positionList = sorted(filter(lambda x:blockDict[x] > 1, blockDict.keys()))
-                if len(positionList):
-                    raise SystemError("No overlaps found between {}s restricted by 'overlap'".format(btype))
+            if self.__fun != 'intersect':
+                positionList = list(filter(lambda x:blockDict[x] > 1, blockDict.keys()))
+            if len(positionList) == 0:
+                raise SystemError("No overlaps found between {}s restricted by 'overlap'".format(btype))
         ## get new exon list with real genomic coordinates
         newBlockList = []
         prev = min(positionList) - 1
@@ -427,8 +429,8 @@ class bed12ops(object):
         ## remove the single number in newBlockList, like the "8" in [1,2,3,4,8,10,11]
         ## newBlockList: [[1,4], [8,10]]
         newBlockList = list(filter(lambda x:x[1] - x[0] > 0, newBlockList))
-        if self.__overlap and btyp == 'exon':
-            if len(newBlockList):
+        if self.__overlap and btype == 'exon':
+            if len(newBlockList) == 0:
                 raise SystemError("No overlaps found between blocks restricted by 'overlap'")
         ## get blockCount, blockSizes, blockStarts
         blockCount = len(newBlockList)
