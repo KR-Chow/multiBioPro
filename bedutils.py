@@ -27,7 +27,7 @@ class initbed(object):
 class buildbed(object):
     def __init__(self, row):
         self.clear = True
-        self.list = row
+        self.list = list(map(str, row))
         self.colnum = len(row)
         self.name = str(random.randrange(100000))
         self.score = 255
@@ -55,9 +55,12 @@ class buildbed(object):
                 self.bstart = [int(i) for i in row[11].strip(',').split(',') if i]
             except ValueError as e:
                 self.clear = False
-        self.start = int(self.start)
-        self.end = int(self.end)
-        self.score =float(self.score)
+        try:
+            self.start = int(self.start)
+            self.end = int(self.end)
+            self.score =float(self.score)
+        except ValueError as e:
+            raise SystemError("The chromStart or chromEnd should be integer, or score should be number!")
        # check bed
         if self.clear:
             try:
@@ -84,6 +87,7 @@ class buildbed(object):
                     raise SystemError("Input is not a standard bed12 row!")
                 if self.tstart < self.start or self.tend > self.end:
                     raise SystemError("The thick start-end should not exceed the bed region!")
+                self.exonlength = sum(self.bsize)
         if self.clear is False:
             raise SystemError("Error when passing row! Please pass bed-like row to buildbed!")
     # return coordinates are in bed format
@@ -168,7 +172,7 @@ class buildbed(object):
         return self
 
 # bed operations on 2 bed6 format row
-class bedops(object):
+class bed6ops(object):
     # a:bed locus-A, b:bed locus-B
     # s:strand, d:distance
     # retrun self.a self.b, self.i, self.m
@@ -210,12 +214,22 @@ class bedops(object):
             score = sum(socreList) / 2
         return score
     # return True if a overlap with b
-    def overlap(self):
+    def __overlap(self):
         distance = min(self.a.end, self.b.end) - max(self.a.start, self.b.start)
         if distance > 0:
             return True
         else:
             return False
+    # covert bed6 to bed12
+    def tobed12(self, rgb='255,0,0'):
+        tstart = self.a.start
+        tend = self.a.end
+        bcount = 1
+        bsize = str(self.a.length) + ','
+        bstart = '0,'
+        bedrow = [self.a.chr, self.a.start, self.a.end, self.a.name, self.a.score, self.a.strand]
+        bedrow += [tstart, tend, rgb, bcount, bsize, bstart]
+        return buildbed(bedrow)
     # calculate distance between intervals
     def discompute(self, b, tss=False, center=False):
         # tss=False, return distance ralative to genome (b to a), ignore strand
@@ -270,7 +284,7 @@ class bedops(object):
             start = max(self.a.start, self.b.start)
             end = min(self.a.end, self.b.end)
             row = [chrom, start, end, name, newScore, strand]
-            self = bedops(row)
+            self = bed6ops(row)
             ## indicate the function
             self.fun = 'intersect'
             self.ilength = length
@@ -287,7 +301,7 @@ class bedops(object):
         self.strand = s
         self.clear = self.__check()
         setDistance = d
-        overlap = self.overlap()
+        overlap = self.__overlap()
         distance = abs(self.discompute().distance)
         if overlap is True or distance <= setDistance:
             name = '|'.join([self.a.name, self.b.name])
