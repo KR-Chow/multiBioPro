@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 ##########################################
 #     handle the bed format row data     #
-#          2021.5.9                      #
+#          2021.6.5                      #
 ##########################################
 __author__ = "K.R.Chow"
 __version__ = "v1.0"
@@ -13,7 +13,7 @@ class initbed(object):
         self.chr = None
         self.start = None
         self.end = None
-        self.name = str(random.randrange(100000))
+        self.name = str(random.randrange(100))
         self.score = 255
         self.strand = '.'
         if n > 6:
@@ -29,7 +29,7 @@ class buildbed(object):
         self.clear = True
         self.list = list(map(str, row))
         self.colnum = len(row)
-        self.name = str(random.randrange(100000))
+        self.name = str(random.randrange(100))
         self.score = 255
         self.strand = '.'
         self.bcount = None
@@ -85,18 +85,16 @@ class buildbed(object):
             if self.colnum >= 12:
                 if self.bcount != len(self.bsize) or self.bcount != len(self.bstart):
                     raise SystemError("Input is not a standard bed12 row!")
-                if self.tstart < self.start or self.tend > self.end:
+                if self.tstart < self.start or self.tend > self.end or self.tstart == self.bsize[0]:
                     raise SystemError("The thick start-end should not exceed the bed region!")
                 self.exonlength = sum(self.bsize)
         if self.clear is False:
             raise SystemError("Error when passing row! Please pass bed-like row to buildbed!")
     # return coordinates are in bed format
-    # strand is taken into consideration
-    # if "-" strand, all coordinates were re-order by reversing
     # row = ['chr1','8423769','8424898','ENST00000464367','1000','-','8423770', '8424810','0','2','546,93,','0,1036,']
-    # self.exon = [[8424805, 8424898], [8423769, 8424315]]
+    # self.exon = [[8423769, 8424315], [8424805, 8424898]]
     # self.intron = [[8424315, 8424805]]
-    # self.cds = [[8424805, 8424810], [8423770, 8424315]]
+    # self.cds = [[8423770, 8424315], [8424805, 8424810]]
     # self.utr5 = [[8424810, 8424898]]
     # self.utr3 = [[8423769, 8423770]]
     def decode(self):
@@ -130,12 +128,7 @@ class buildbed(object):
                 ## [exon.end, next.exon.start]
                 self.intron.append([self.exon[i][1], self.exon[i+1][0]])
         ## thick start and thick end
-        if self.tstart == self.tend:
-            ## for non-coding transcript
-            if self.strand == '-':
-                self.exon.reverse()
-                self.intron.reverse()
-        else:
+        if self.tstart != self.tend:
             ## for protein-coding transcript
             tstartLocus = [self.tstart, self.tstart + 1]
             tendLocus = [self.tend - 1, self.tend]
@@ -166,9 +159,6 @@ class buildbed(object):
                     self.utr3.append([blockStart, blockEnd])
             if self.strand == '-':
                 self.utr5, self.utr3 = self.utr3, self.utr5
-                tempList = [self.exon, self.intron, self.cds, self.utr5, self.utr3]
-                for coord in tempList:
-                    coord.reverse()
         return self
 
 # bed operations on 2 bed6 format row
@@ -236,29 +226,39 @@ class bed6ops(object):
         # tss=True (transcription start site), take locus-B as genomic locus, a as RNA-type locus
         # tss will ignore self.strand
         # center only work with tss
+        # if tss:False, center:False, [1, 2] and [2, 4] returns 1
+        # if tss:False, center:False, [1, 3] and [2, 4] returns 0
+        # if tss:False, center:False, [1, 3] and [0, 1] returns -1
         self.b = buildbed(b)
         self.clear = self.__check()
         tssFlag, centerFlag = tss, center
         self.distance = None
         self.strand = False
-        overlapLength = self.intersect().intersect.length
+        overlap = self.intersect(b)
+        if bool(overlap) is True:
+            overlapLength = overlap.ilength
+        else:
+            overlapLength = 0
         if overlapLength > 0:
             distance = 0
         else:
             if tssFlag:
                 if centerFlag:
                     peak = int((self.b.end + self.b.start) / 2)
-                    distance = (peak - self.a.end) if self.a.strand == '-' else (peak - self.a.start)
+                    distance = (peak - self.a.end) if self.a.strand == '-' else (peak - self.a.start - 1)
                 else:
                     if self.a.strand == '+' or self.a.strand == '.':
-                        distance = min(abs(self.b.start - self.a.start), abs(self.b.end - self.a.start))
-                        if self.b.end <= self.a.start: distance = -distance
+                        distance = min(abs(self.b.start - self.a.end + 1), abs(self.b.end - self.a.start - 1))
+                        if self.b.end <= self.a.start:
+                            distance = -distance
                     else:
                         distance = min(abs(self.b.start - self.a.end + 1), abs(self.b.end - self.a.end))
-                        if self.a.end <= self.b.start: distance = -distance
+                        if self.a.end <= self.b.start:
+                            distance = -distance
             else:
-                distance = min(abs(self.b.start - self.a.end + 1), abs(self.b.end - self.a.start))
-                if self.b.end <= self.a.start: distance = -distance
+                distance = min(abs(self.b.start - self.a.end + 1), abs(self.b.end - self.a.start - 1))
+                if self.b.end <= self.a.start:
+                    distance = -distance
         self.distance = distance
         return self
     # calcualte intersection length of intervals
@@ -296,13 +296,16 @@ class bed6ops(object):
     # merge intervals
     def merge(self, b, s=False, d=0, score='sum'):
         ## 0-based, return False if no merge
+        ## always merge the overlapped blocks
+        ## d=0, eg. [1,2], [2,3]
+        ## d=-1, for overlap with overlapped blocks only
         ## if s=False, return strand with '.' when a and b has different orientations
         self.b = buildbed(b)
         self.strand = s
         self.clear = self.__check()
         setDistance = d
         overlap = self.__overlap()
-        distance = abs(self.discompute().distance)
+        distance = abs(self.discompute(b).distance) - 1
         if overlap is True or distance <= setDistance:
             name = '|'.join([self.a.name, self.b.name])
             newScore = self.__getScore(self.a.score, self.b.score, method=score)
@@ -314,7 +317,7 @@ class bed6ops(object):
             start = min(self.a.start, self.b.start)
             end = max(self.a.end, self.b.end)
             row = [chrom, start, end, name, newScore, strand]
-            self = bedops(row)
+            self = bed6ops(row)
             ## indicate the function
             self.fun = 'merge'
             return self
@@ -374,6 +377,7 @@ class bed12ops(object):
             raise SystemError("Input parameters could not pass the requirment!")
         ## get structures for self.a and self.b: exon, intron, cds, utr5, utr3
         self.a = self.a.decode()
+    # check bed
     def __check(self):
         if self.strand is not True and self.strand is not False:
             raise SystemError("Input parameters 's' should be bool type.")
@@ -395,58 +399,216 @@ class bed12ops(object):
             raise SystemError("Input parameters could not pass the requirment!")
         return self.clear
     # get merged or overlap exons
-    def __squeezeBlock(self, blockList1, blockList2, btype):
+    def __squeezeBlock(self, block1List, block2List, btype):
         ## store all block coordinates in a dictionary, ther value repsents the overlap counts
-        blockDict = {}
-        for block in blockList1 + blockList2:
-            for j in range(block[0], block[1] + 1):
-                if j not in blockDict:
-                    blockDict[j] = 1
+        if self.__tx is False:
+            ## if not in tx mode, means we can freely suqeeze block
+            blockDict = {}
+            for block in block1List + block2List:
+                for j in range(block[0], block[1] + 1):
+                    if j not in blockDict:
+                        blockDict[j] = 1
+                    else:
+                        blockDict[j] += 1
+            ## construct the merged or overlapped exons
+            if self.__fun == 'merge':
+                positionList = sorted(blockDict.keys())
+            elif self.__fun == 'intersect':
+                positionList = sorted(filter(lambda x:blockDict[x] > 1, blockDict.keys()))
+            if self.__overlap is not True and self.__overlap is not False:
+                raise SystemError("Input parameters 'overlap' should be bool type.")
+            if self.__tx is not True and self.__tx is not False:
+                raise SystemError("Input parameters 'tx' should be bool type.")
+            if self.__inner is not True and self.__inner is not False:
+                raise SystemError("Input parameters 'inner' should be bool type.")
+            ## raise errer when no overlaps found restricted by 'overlap'
+            if self.__overlap and btype == 'exon':
+                if self.__fun != 'intersect':
+                    positionList = list(filter(lambda x:blockDict[x] > 1, blockDict.keys()))
+                if len(positionList) == 0:
+                    raise SystemError("No overlaps found between {}s restricted by 'overlap'".format(btype))
+            ## get new exon list with real genomic coordinates
+            newBlockList = []
+            prev = min(positionList) - 1
+            blockStart = prev + 1
+            for pos in positionList:
+                if pos == positionList[-1]:
+                    ## if the loop reach the end, store the last block
+                    if pos - prev > 1:
+                        blockEnd = prev
+                        newBlockList.append([blockStart, blockEnd])
+                        newBlockList.append([pos, pos])
+                    else:
+                        blockEnd = pos
+                        newBlockList.append([blockStart, blockEnd])
                 else:
-                    blockDict[j] += 1
-        ## construct the merged or overlapped exons
-        if self.__fun == 'merge':
-            positionList = sorted(blockDict.keys())
-        elif self.__fun == 'intersect':
-            positionList = sorted(filter(lambda x:blockDict[x] > 1, blockDict.keys()))
-        if self.__overlap is not True and self.__overlap is not False:
-            raise SystemError("Input parameters 'overlap' should be bool type.")
-        ## raise errer when no overlaps found restricted by 'overlap'
-        if self.__overlap and btype == 'exon':
-            if self.__fun != 'intersect':
-                positionList = list(filter(lambda x:blockDict[x] > 1, blockDict.keys()))
-            if len(positionList) == 0:
-                raise SystemError("No overlaps found between {}s restricted by 'overlap'".format(btype))
-        ## get new exon list with real genomic coordinates
-        newBlockList = []
-        prev = min(positionList) - 1
-        blockStart = prev + 1
-        for pos in positionList:
-            if pos == positionList[-1]:
-                ## if the loop reach the end, store the last block
-                if pos - prev > 1:
-                    blockEnd = prev
-                    newBlockList.append([blockStart, blockEnd])
-                    newBlockList.append([pos, pos])
+                    if pos - prev > 1:
+                        ## if the position is not continuous with previous, store the current block and start a new block
+                        blockEnd = prev
+                        newBlockList.append([blockStart, blockEnd])
+                        blockStart = pos
+                        prev = pos
+                    else:
+                        prev = pos
+            ## remove the single number in newBlockList, like the "8" in [1,2,3,4,8,10,11]
+            ## newBlockList: [[1,4], [8,10]]
+            newBlockList = list(filter(lambda x:x[1] - x[0] > 0, newBlockList))
+            if self.__overlap and btype == 'exon':
+                if len(newBlockList) == 0:
+                    raise SystemError("No overlaps found between blocks restricted by 'overlap'")
+        else:
+            ## if tx mode is on, should be very careful, do not destroy the trascript structure
+            ## make intersected block in b as block-b
+            ## if block-b overlap with the internal block of a, that they must be the same
+            ## if the block-i overlap with the fisrt or last block of a, then the block-i should not overhang in the
+            ## internal of the block of a
+            b1len = len(block1List)
+            b2len = len(block2List)
+            newBlockList = []
+            ## if block1 and block2 both have only 1 block
+            if b1len == 1 and b2len == 1:
+                bed1Row = ['chr1', block1List[0][0], block1List[0][1], 'bed1', 0, '+']
+                bed2Row = ['chr1', block2List[0][0], block2List[0][1], 'bed2', 0, '+']
+                bed1 = bed6ops(bed1Row)
+                if self.__fun == 'merge':
+                    bedops = bed1.merge(bed1Row, d=-1)
+                elif self.__fun == 'intersect':
+                    bedops = bed1.intersect(bed1Row)
+                if bool(bedops) is True:
+                    newBlockList.append([bedops.a.start, bedops.a.end])
                 else:
-                    blockEnd = pos
-                    newBlockList.append([blockStart, blockEnd])
+                    raise SystemError("No {} (no overlap) when tx mode is on".format(self.__fun))
+            elif b1len == 1 or b2len == 1:
+                ## one of inputs has only 1 block
+                ## always let block2List be blocksize == 1
+                if b1len == 1:
+                    block2List, block1List = block1List, block2List
+                    b1len = len(block1List)
+                    b2len = len(block2List)
+                bed2Row = ['chr1', block2List[0][0], block2List[0][1], 'bed2', 0, '+']
+                bed2 = bed6ops(bed2Row)
+                overlapCount = 0
+                overlapIndex = -1
+                for i in range(b1len):
+                    bed1Row = ['chr1', block1List[i][0], block1List[i][1], 'bed1', 0, '+']
+                    if self.__fun == 'merge':
+                        bedops = bed2.merge(bed1Row, d=-1)
+                    elif self.__fun == 'intersect':
+                        bedops = bed2.intersect(bed1Row)
+                    if bool(bedops) is True:
+                        overlapIndex = i
+                        overlapCount += 1
+                if overlapIndex < 0:
+                    raise SystemError("No {} (no overlap) when tx mode is on".format(self.__fun))
+                elif overlapCount > 1:
+                    raise SystemError("2 or more overlaps found when tx mode is on".format(self.__fun))
+                else:
+                    newBlockList = block1List
+                    if overlapIndex == 0:
+                        ## overlap with first block of a
+                        if block1List[0][1] != block2List[0][1]:
+                            raise SystemError("block right edges should be the same when tx mode is on".format(self.__fun))
+                        end = block1List[0][1]
+                        if self.__fun == 'merge':
+                            start = max(block1List[0][0], block2List[0][0])
+                        elif self.__fun == 'intersect':
+                            start = min(block1List[0][0], block2List[0][0])
+                        newBlockList[0] = [start, end]
+                    elif overlapIndex == (b1len - 1):
+                        ## overlap with last block of a
+                        if block1List[-1][0] != block2List[0][0]:
+                            raise SystemError("block left edges should be the same when tx mode is on".format(self.__fun))
+                        start = block1List[-1][0]
+                        if self.__fun == 'merge':
+                            end = max(block1List[-1][1], block2List[0][1])
+                        elif self.__fun == 'intersect':
+                            end = min(block1List[-1][1], block2List[0][1])
+                        newBlockList[-1] = [start, end]
+                    else:
+                        ## ignore the internal overlap block to keep the transcript structure
+                        if block1List[overlapIndex][0] <= block2List[0][0] and block2List[0][1] <= block1List[overlapIndex][1]:
+                            if self.__inner is True:
+                                if self.__fun == 'intersect':
+                                    start = min(block1List[overlapIndex][0], block2List[0][0])
+                                    end = min(block1List[overlapIndex][1], block2List[0][1])
+                                    newBlockList = [[start, end]]
+                            else:
+                                raise SystemError("internal overlap is not allow({}) with inner=False when tx mode is on".format(self.__fun))
+                        else:
+                            raise SystemError("internal overlap is not allow({}) when tx mode is on".format(self.__fun))
             else:
-                if pos - prev > 1:
-                    ## if the position is not continuous with previous, store the current block and start a new block
-                    blockEnd = prev
-                    newBlockList.append([blockStart, blockEnd])
-                    blockStart = pos
-                    prev = pos
+                ## a and b both have at least 2 blocks
+                ## always make block2 has the smallest number of blocks
+                if b2len > b1len:
+                    block2List, block1List = block1List, block2List
+                    b1len = len(block1List)
+                    b2len = len(block2List)
+                ## record intersected block pairs
+                block1Dict = {}
+                block2Dict = {}
+                for i in range(b1len):
+                    bed1Row = ['chr1', block1List[i][0], block1List[i][1], 'bed1', 0, '+']
+                    bed1 = bed6ops(bed1Row)
+                    for j in range(b2len):
+                        bed2Row = ['chr1', block2List[j][0], block2List[j][1], 'bed2', 0, '+']
+                        if self.__fun == 'merge':
+                            bedops = bed1.merge(bed2Row, d=-1)
+                        elif self.__fun == 'intersect':
+                            bedops = bed1.intersect(bed2Row)
+                        if bool(bedops) is True:
+                            if i not in block1Dict:
+                                block1Dict[i] = {j:1}
+                            else:
+                                raise SystemError("2 or more overlaps on same block found when tx mode is on".format(self.__fun))
+                            if j not in block2Dict:
+                                block2Dict[j] = {i:1}
+                            else:
+                                raise SystemError("2 or more overlaps on same block found when tx mode is on".format(self.__fun))
+                ## decode intersected blocks
+                oblock1IndexList = sorted(block1Dict)
+                oblock2IndexList = sorted(block2Dict)
+                firstA = oblock1IndexList[0]
+                firstB = oblock2IndexList[0]
+                lastA = oblock1IndexList[-1]
+                lastB = oblock2IndexList[-1]
+                ## fisrt overlap block
+                if block1List[firstA][1] != block2List[firstB][1]:
+                    raise SystemError("block right edges should be the same when tx mode is on".format(self.__fun))
                 else:
-                    prev = pos
-        ## remove the single number in newBlockList, like the "8" in [1,2,3,4,8,10,11]
-        ## newBlockList: [[1,4], [8,10]]
-        newBlockList = list(filter(lambda x:x[1] - x[0] > 0, newBlockList))
-        if self.__overlap and btype == 'exon':
-            if len(newBlockList) == 0:
-                raise SystemError("No overlaps found between blocks restricted by 'overlap'")
+                    if self.__fun == 'merge':
+                        start = min(block1List[firstA][0], block2List[firstB][0])
+                    elif self.__fun == 'intersect':
+                        start = max(block1List[firstA][0], block2List[firstB][0])
+                    end = block1List[firstA][1]
+                    newBlockList.append([start, end])
+                ## last overlap block
+                if block1List[lastA][0] != block2List[lastB][0]:
+                    raise SystemError("block left edges should be the same when tx mode is on".format(self.__fun))
+                else:
+                    if self.__fun == 'merge':
+                        end = max(block1List[lastA][1], block2List[lastB][1])
+                    elif self.__fun == 'intersect':
+                        end = min(block1List[lastA][1], block2List[lastB][1])
+                    start = block1List[lastA][0]
+                    newBlockList.append([start, end])
+                ## check internal overlap blocks
+                for i in range(firstA + 1, lastA):
+                    ## index in block2List
+                    j = block1Dict[i]
+                    if block1List[i][0] != block2List[j][0] or block1List[i][1] != block2List[j][1]:
+                        raise SystemError("internal blocks should be the same when tx mode is on".format(self.__fun))
+                    else:
+                        newBlockList.append(block1List[i])
+                ## for merge peaks
+                if self.__fun == 'merge':
+                    remainA = list(range(0, firstA)) + list(range(lastA + 1, b1len))
+                    for i in remainA:
+                        newBlockList.append(block1List[i])
+                    remainB = list(range(0, firstB)) + list(range(lastB + 1, b2len))
+                    for i in remainB:
+                        newBlockList.append(block2List[i])
         ## get blockCount, blockSizes, blockStarts
+        newBlockList = sorted(newBlockList, key=lambda x:x[0])
         blockCount = len(newBlockList)
         newStart = min(map(lambda x:x[0], newBlockList))
         newEnd = max(map(lambda x:x[1], newBlockList))
@@ -475,13 +637,15 @@ class bed12ops(object):
             score = sum(socreList) / 2
         return score
     # merge 2 bed12 based on exons
-    def merge(self, b, score='sum', s=False, overlap=False):
-        ## if overlap is True, only merge bolock when any overlaps found
+    def merge(self, b, score='sum', s=False, tx=True, overlap=False):
+        ## if overlap is True, only merge block when any overlaps found
         ## return a bed12ops object
         self.strand = s
+        self.__tx = tx
         self.__score = score
         self.__fun = 'merge'
         self.__overlap = overlap
+        self.__inner = True
         ## get structures for self.a and self.b: exon, intron, cds, utr5, utr3
         self.b = buildbed(b)
         self.b = self.b.decode()
@@ -496,19 +660,32 @@ class bed12ops(object):
         newScore = self.__getScore(self.a.score, self.b.score)
         ## for exons
         start, end, bcount, bsize, bstart = self.__squeezeBlock(self.a.exon, self.b.exon, 'exon')
+        try:
+            start, end, bcount, bsize, bstart = self.__squeezeBlock(self.a.exon, self.b.exon, 'exon')
+        except (SystemError, ValueError) as e:
+            return False
         ## for cds
-        tstart, tend, __, __, __ = self.__squeezeBlock(self.a.cds, self.b.cds, 'cds')
+        try:
+            tstart, tend, __, __, __ = self.__squeezeBlock(self.a.cds, self.b.cds, 'cds')
+        except SystemError as e:
+            tstart = start
+            tend = start
         ## get the final merged results
         row = [chrom, start, end, name, newScore, strand, tstart, tend, 255, bcount, bsize, bstart]
         self = bed12ops(row)
         return self
     # intersect 2 bed12 based on exons
-    def intersect(self, b, score='sum', s=False):
+    def intersect(self, b, score='sum', s=False, tx=True, inner=False):
         ## return a bed12ops object
         self.strand = s
+        self.__tx = tx
         self.__score = score
         self.__fun = 'intersect'
         self.__overlap = True
+        self.__inner = inner
+        ## if inner is True, for a has >2 blocks, b has only 1 block
+        ## then also overlap b with internal blocks of a
+        ## only works with tx=True
         ## get structures for self.a and self.b: exon, intron, cds, utr5, utr3
         self.b = buildbed(b)
         self.b = self.b.decode()
@@ -521,14 +698,16 @@ class bed12ops(object):
             strand = '.'
         ## how to get score
         newScore = self.__getScore(self.a.score, self.b.score)
-        ## for exons
-        start, end, bcount, bsize, bstart = self.__squeezeBlock(self.a.exon, self.b.exon, 'exon')
+        try:
+            start, end, bcount, bsize, bstart = self.__squeezeBlock(self.a.exon, self.b.exon, 'exon')
+        except (SystemError, ValueError) as e:
+            return False
         ## for cds
         try:
             tstart, tend, __, __, __ = self.__squeezeBlock(self.a.cds, self.b.cds, 'cds')
-        except ValueError as e:
-            tstart = start,
-            tend = end
+        except (SystemError, ValueError) as e:
+            tstart = start
+            tend = start
         ## get the final overlapd results
         row = [chrom, start, end, name, newScore, strand, tstart, tend, 255, bcount, bsize, bstart]
         self = bed12ops(row)
