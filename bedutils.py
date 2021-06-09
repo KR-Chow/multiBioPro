@@ -119,7 +119,7 @@ class buildbed(object):
         for exon in self.exon:
             for i in range(exon[0], exon[1] + 1):
                 if i in blockDict:
-                    raise SystemError("There are overlaps in input bed12 row!")
+                    raise SystemError("There are overlapped exons in input bed12 row!")
                 else:
                     blockDict[i] = 1
         self.intron = []
@@ -419,8 +419,8 @@ class bed12ops(object):
                 raise SystemError("Input parameters 'overlap' should be bool type.")
             if self.__tx is not True and self.__tx is not False:
                 raise SystemError("Input parameters 'tx' should be bool type.")
-            if self.__inner is not True and self.__inner is not False:
-                raise SystemError("Input parameters 'inner' should be bool type.")
+            if self.__part is not True and self.__part is not False:
+                raise SystemError("Input parameters 'part' should be bool type.")
             ## raise errer when no overlaps found restricted by 'overlap'
             if self.__overlap and btype == 'exon':
                 if self.__fun != 'intersect':
@@ -492,11 +492,12 @@ class bed12ops(object):
                 for i in range(b1len):
                     bed1Row = ['chr1', block1List[i][0], block1List[i][1], 'bed1', 0, '+']
                     if self.__fun == 'merge':
-                        bedops = bed2.merge(bed1Row, d=-1)
+                        bedopsTmp = bed2.merge(bed1Row, d=-1)
                     elif self.__fun == 'intersect':
-                        bedops = bed2.intersect(bed1Row)
-                    if bool(bedops) is True:
+                        bedopsTmp = bed2.intersect(bed1Row)
+                    if bool(bedopsTmp) is True:
                         overlapIndex = i
+                        bedops = bedopsTmp
                         overlapCount += 1
                 if overlapIndex < 0:
                     raise SystemError("No {} (no overlap) when tx mode is on".format(self.__fun))
@@ -508,32 +509,24 @@ class bed12ops(object):
                         ## overlap with first block of a
                         if block1List[0][1] != block2List[0][1]:
                             raise SystemError("block right edges should be the same when tx mode is on".format(self.__fun))
-                        end = block1List[0][1]
-                        if self.__fun == 'merge':
-                            start = max(block1List[0][0], block2List[0][0])
-                        elif self.__fun == 'intersect':
-                            start = min(block1List[0][0], block2List[0][0])
-                        newBlockList[0] = [start, end]
+                        newBlockList[0] = [bedops.a.start, bedops.a.end]
+                        if (btype == 'cds' or self.__part is True) and self.__fun == 'intersect':
+                            newBlockList = [[bedops.a.start, bedops.a.end]]
                     elif overlapIndex == (b1len - 1):
                         ## overlap with last block of a
                         if block1List[-1][0] != block2List[0][0]:
                             raise SystemError("block left edges should be the same when tx mode is on".format(self.__fun))
-                        start = block1List[-1][0]
-                        if self.__fun == 'merge':
-                            end = max(block1List[-1][1], block2List[0][1])
-                        elif self.__fun == 'intersect':
-                            end = min(block1List[-1][1], block2List[0][1])
-                        newBlockList[-1] = [start, end]
+                        newBlockList[-1] = [bedops.a.start, bedops.a.end]
+                        if (btype == 'cds' or self.__part is True) and self.__fun == 'intersect':
+                            newBlockList = [[bedops.a.start, bedops.a.end]]
                     else:
                         ## ignore the internal overlap block to keep the transcript structure
                         if block1List[overlapIndex][0] <= block2List[0][0] and block2List[0][1] <= block1List[overlapIndex][1]:
-                            if self.__inner is True:
+                            if self.__part is True:
                                 if self.__fun == 'intersect':
-                                    start = min(block1List[overlapIndex][0], block2List[0][0])
-                                    end = min(block1List[overlapIndex][1], block2List[0][1])
-                                    newBlockList = [[start, end]]
+                                    newBlockList = [[bedops.a.start, bedops.a.end]]
                             else:
-                                raise SystemError("internal overlap is not allow({}) with inner=False when tx mode is on".format(self.__fun))
+                                raise SystemError("internal overlap is not allow({}) with part=False when tx mode is on".format(self.__fun))
                         else:
                             raise SystemError("internal overlap is not allow({}) when tx mode is on".format(self.__fun))
             else:
@@ -557,48 +550,55 @@ class bed12ops(object):
                             bedops = bed1.intersect(bed2Row)
                         if bool(bedops) is True:
                             if i not in block1Dict:
-                                block1Dict[i] = {j:1}
+                                block1Dict[i] = {j:bedops}
                             else:
                                 raise SystemError("2 or more overlaps on same block found when tx mode is on".format(self.__fun))
                             if j not in block2Dict:
-                                block2Dict[j] = {i:1}
+                                block2Dict[j] = {i:bedops}
                             else:
                                 raise SystemError("2 or more overlaps on same block found when tx mode is on".format(self.__fun))
                 ## decode intersected blocks
-                oblock1IndexList = sorted(block1Dict)
-                oblock2IndexList = sorted(block2Dict)
+                oblock1IndexList = sorted(block1Dict.keys())
+                oblock2IndexList = sorted(block2Dict.keys())
+                if len(oblock1IndexList) == 0:
+                    raise SystemError("No {} (no overlap) when tx mode is on".format(self.__fun))
                 firstA = oblock1IndexList[0]
                 firstB = oblock2IndexList[0]
                 lastA = oblock1IndexList[-1]
                 lastB = oblock2IndexList[-1]
+                ## check if intersect blocks are continuous
+                block1ConFlag = (oblock1IndexList[0] + len(oblock1IndexList) - 1 == oblock1IndexList[-1])
+                block2ConFlag = (oblock2IndexList[0] + len(oblock2IndexList) - 1 == oblock2IndexList[-1])
+                if block1ConFlag is False or block2ConFlag is False:
+                    raise SystemError("The overlaps is not continuous when tx mode is on".format(self.__fun))
+                ## when only internal overlaps
+                if self.__part is False or self.__fun == 'merge':
+                    ## if part is False when running intersect(), or when running merge()
+                    ## the overlaps should be started at the first block of a or b
+                    ## ther overlaps should be ended at the last block of a or b
+                    if ( firstA != 0 and firstB != 0 ) or ( lastA != (b1len - 1) and lastB != (b2len - 1) ):
+                        raise SystemError("only internal overlaps is not allow when tx mode is on".format(self.__fun))
                 ## fisrt overlap block
                 if block1List[firstA][1] != block2List[firstB][1]:
                     raise SystemError("block right edges should be the same when tx mode is on".format(self.__fun))
                 else:
-                    if self.__fun == 'merge':
-                        start = min(block1List[firstA][0], block2List[firstB][0])
-                    elif self.__fun == 'intersect':
-                        start = max(block1List[firstA][0], block2List[firstB][0])
-                    end = block1List[firstA][1]
-                    newBlockList.append([start, end])
+                    bedops = block1Dict[firstA][firstB]
+                    newBlockList.append([bedops.a.start, bedops.a.end])
                 ## last overlap block
-                if block1List[lastA][0] != block2List[lastB][0]:
-                    raise SystemError("block left edges should be the same when tx mode is on".format(self.__fun))
-                else:
-                    if self.__fun == 'merge':
-                        end = max(block1List[lastA][1], block2List[lastB][1])
-                    elif self.__fun == 'intersect':
-                        end = min(block1List[lastA][1], block2List[lastB][1])
-                    start = block1List[lastA][0]
-                    newBlockList.append([start, end])
-                ## check internal overlap blocks
-                for i in range(firstA + 1, lastA):
-                    ## index in block2List
-                    j = block1Dict[i]
-                    if block1List[i][0] != block2List[j][0] or block1List[i][1] != block2List[j][1]:
-                        raise SystemError("internal blocks should be the same when tx mode is on".format(self.__fun))
+                if firstA < lastA:
+                    if block1List[lastA][0] != block2List[lastB][0]:
+                        raise SystemError("block left edges should be the same when tx mode is on".format(self.__fun))
                     else:
-                        newBlockList.append(block1List[i])
+                        bedops = block1Dict[lastA][lastB]
+                        newBlockList.append([bedops.a.start, bedops.a.end])
+                ## check internal overlap blocks
+                if lastA > firstA + 1:
+                    for i in range(firstA + 1, lastA):
+                        j = sorted(block1Dict[i].keys())[0]
+                        if block1List[i][0] != block2List[j][0] or block1List[i][1] != block2List[j][1]:
+                            raise SystemError("internal blocks should be the same when tx mode is on".format(self.__fun))
+                        else:
+                            newBlockList.append(block1List[i])
                 ## for merge peaks
                 if self.__fun == 'merge':
                     remainA = list(range(0, firstA)) + list(range(lastA + 1, b1len))
@@ -635,9 +635,15 @@ class bed12ops(object):
             score = max(socreList)
         elif self.__score == 'average':
             score = sum(socreList) / 2
+        elif self.__score == 'a':
+            score = self.a.score
+        elif self.__score == 'b':
+            score = self.b.score
+        else:
+            raise SystemError("socre should be one of [sum, min, max, average, a, b]")
         return score
     # merge 2 bed12 based on exons
-    def merge(self, b, score='sum', s=False, tx=True, overlap=False):
+    def merge(self, b, score='sum', s=False, tx=True, overlap=False, cds=True):
         ## if overlap is True, only merge block when any overlaps found
         ## return a bed12ops object
         self.strand = s
@@ -645,7 +651,7 @@ class bed12ops(object):
         self.__score = score
         self.__fun = 'merge'
         self.__overlap = overlap
-        self.__inner = True
+        self.__part = True
         ## get structures for self.a and self.b: exon, intron, cds, utr5, utr3
         self.b = buildbed(b)
         self.b = self.b.decode()
@@ -659,15 +665,18 @@ class bed12ops(object):
         ## how to get score
         newScore = self.__getScore(self.a.score, self.b.score)
         ## for exons
-        start, end, bcount, bsize, bstart = self.__squeezeBlock(self.a.exon, self.b.exon, 'exon')
         try:
             start, end, bcount, bsize, bstart = self.__squeezeBlock(self.a.exon, self.b.exon, 'exon')
         except (SystemError, ValueError) as e:
             return False
         ## for cds
-        try:
-            tstart, tend, __, __, __ = self.__squeezeBlock(self.a.cds, self.b.cds, 'cds')
-        except SystemError as e:
+        if cds is True:
+            try:
+                tstart, tend, __, __, __ = self.__squeezeBlock(self.a.cds, self.b.cds, 'cds')
+            except SystemError as e:
+                tstart = start
+                tend = start
+        else:
             tstart = start
             tend = start
         ## get the final merged results
@@ -675,17 +684,16 @@ class bed12ops(object):
         self = bed12ops(row)
         return self
     # intersect 2 bed12 based on exons
-    def intersect(self, b, score='sum', s=False, tx=True, inner=False):
+    def intersect(self, b, score='sum', s=False, tx=True, part=False, cds=True):
         ## return a bed12ops object
         self.strand = s
         self.__tx = tx
         self.__score = score
         self.__fun = 'intersect'
         self.__overlap = True
-        self.__inner = inner
-        ## if inner is True, for a has >2 blocks, b has only 1 block
-        ## then also overlap b with internal blocks of a
-        ## only works with tx=True
+        self.__part = part
+        ## if part is True, for a has >2 blocks, b has only 1 block, then return the overlaps instead of block-a
+        ## part only works with tx=True
         ## get structures for self.a and self.b: exon, intron, cds, utr5, utr3
         self.b = buildbed(b)
         self.b = self.b.decode()
@@ -703,9 +711,13 @@ class bed12ops(object):
         except (SystemError, ValueError) as e:
             return False
         ## for cds
-        try:
-            tstart, tend, __, __, __ = self.__squeezeBlock(self.a.cds, self.b.cds, 'cds')
-        except (SystemError, ValueError) as e:
+        if cds is True:
+            try:
+                tstart, tend, __, __, __ = self.__squeezeBlock(self.a.cds, self.b.cds, 'cds')
+            except SystemError as e:
+                tstart = start
+                tend = start
+        else:
             tstart = start
             tend = start
         ## get the final overlapd results
