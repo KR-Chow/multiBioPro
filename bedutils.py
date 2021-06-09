@@ -507,26 +507,28 @@ class bed12ops(object):
                     newBlockList = block1List
                     if overlapIndex == 0:
                         ## overlap with first block of a
-                        if block1List[0][1] != block2List[0][1]:
-                            raise SystemError("block right edges should be the same when tx mode is on".format(self.__fun))
+                        if self.__part is False:
+                            if block1List[0][1] != block2List[0][1]:
+                                raise SystemError("block right edges should be the same when tx mode is on".format(self.__fun))
                         newBlockList[0] = [bedops.a.start, bedops.a.end]
                         if (btype == 'cds' or self.__part is True) and self.__fun == 'intersect':
                             newBlockList = [[bedops.a.start, bedops.a.end]]
                     elif overlapIndex == (b1len - 1):
                         ## overlap with last block of a
-                        if block1List[-1][0] != block2List[0][0]:
-                            raise SystemError("block left edges should be the same when tx mode is on".format(self.__fun))
+                        if self.__part is False:
+                            if block1List[-1][0] != block2List[0][0]:
+                                raise SystemError("block left edges should be the same when tx mode is on".format(self.__fun))
                         newBlockList[-1] = [bedops.a.start, bedops.a.end]
                         if (btype == 'cds' or self.__part is True) and self.__fun == 'intersect':
                             newBlockList = [[bedops.a.start, bedops.a.end]]
                     else:
                         ## ignore the internal overlap block to keep the transcript structure
                         if block1List[overlapIndex][0] <= block2List[0][0] and block2List[0][1] <= block1List[overlapIndex][1]:
-                            if self.__part is True:
+                            if self.__part is False:
+                                raise SystemError("internal overlap is not allow({}) with part=False when tx mode is on".format(self.__fun))
+                            else:
                                 if self.__fun == 'intersect':
                                     newBlockList = [[bedops.a.start, bedops.a.end]]
-                            else:
-                                raise SystemError("internal overlap is not allow({}) with part=False when tx mode is on".format(self.__fun))
                         else:
                             raise SystemError("internal overlap is not allow({}) when tx mode is on".format(self.__fun))
             else:
@@ -692,7 +694,7 @@ class bed12ops(object):
         self.__fun = 'intersect'
         self.__overlap = True
         self.__part = part
-        ## if part is True, for a has >2 blocks, b has only 1 block, then return the overlaps instead of block-a
+        ## if part is True: for a has >2 blocks, b has >= 1 block, then return the overlaps instead of block-a or raise errors
         ## part only works with tx=True
         ## get structures for self.a and self.b: exon, intron, cds, utr5, utr3
         self.b = buildbed(b)
