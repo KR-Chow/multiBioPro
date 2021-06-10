@@ -504,33 +504,37 @@ class bed12ops(object):
                 elif overlapCount > 1:
                     raise SystemError("2 or more overlaps found when tx mode is on".format(self.__fun))
                 else:
-                    newBlockList = block1List
-                    if overlapIndex == 0:
-                        ## overlap with first block of a
-                        if self.__part is False:
-                            if block1List[0][1] != block2List[0][1]:
-                                raise SystemError("block right edges should be the same when tx mode is on".format(self.__fun))
-                        newBlockList[0] = [bedops.a.start, bedops.a.end]
-                        if (btype == 'cds' or self.__part is True) and self.__fun == 'intersect':
-                            newBlockList = [[bedops.a.start, bedops.a.end]]
-                    elif overlapIndex == (b1len - 1):
-                        ## overlap with last block of a
-                        if self.__part is False:
-                            if block1List[-1][0] != block2List[0][0]:
-                                raise SystemError("block left edges should be the same when tx mode is on".format(self.__fun))
-                        newBlockList[-1] = [bedops.a.start, bedops.a.end]
-                        if (btype == 'cds' or self.__part is True) and self.__fun == 'intersect':
-                            newBlockList = [[bedops.a.start, bedops.a.end]]
+                    if (btype == 'cds' or self.__part is True) and self.__fun == 'intersect':
+                        newBlockList = [[bedops.a.start, bedops.a.end]]
                     else:
-                        ## ignore the internal overlap block to keep the transcript structure
-                        if block1List[overlapIndex][0] <= block2List[0][0] and block2List[0][1] <= block1List[overlapIndex][1]:
+                        newBlockList = block1List
+                        if overlapIndex == 0:
+                            ## overlap with first block of a
                             if self.__part is False:
-                                raise SystemError("internal overlap is not allow({}) with part=False when tx mode is on".format(self.__fun))
+                                if block1List[0][1] != block2List[0][1]:
+                                    raise SystemError("block right edges should be the same when tx mode is on".format(self.__fun))
                             else:
                                 if self.__fun == 'intersect':
                                     newBlockList = [[bedops.a.start, bedops.a.end]]
+                                else:
+                                    newBlockList[0] = [bedops.a.start, bedops.a.end]
+                        elif overlapIndex == (b1len - 1):
+                            ## overlap with last block of a
+                            if self.__part is False:
+                                if block1List[-1][0] != block2List[0][0]:
+                                    raise SystemError("block left edges should be the same when tx mode is on".format(self.__fun))
+                            else:
+                                if self.__fun == 'intersect':
+                                    newBlockList = [[bedops.a.start, bedops.a.end]]
+                                else:
+                                    newBlockList[-1] = [bedops.a.start, bedops.a.end]
                         else:
-                            raise SystemError("internal overlap is not allow({}) when tx mode is on".format(self.__fun))
+                            ## ignore the internal overlap block to keep the transcript structure
+                            if block1List[overlapIndex][0] <= block2List[0][0] and block2List[0][1] <= block1List[overlapIndex][1]:
+                                if self.__part is False:
+                                    raise SystemError("internal overlap is not allow({}) with part=False when tx mode is on".format(self.__fun))
+                            else:
+                                raise SystemError("internal overlap is not allow({}) when tx mode is on".format(self.__fun))
             else:
                 ## a and b both have at least 2 blocks
                 ## always make block2 has the smallest number of blocks
