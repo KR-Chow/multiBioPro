@@ -514,20 +514,16 @@ class bed12ops(object):
                                 if block1List[0][1] != block2List[0][1]:
                                     raise SystemError("block right edges should be the same when tx mode is on".format(self.__fun))
                             else:
-                                if self.__fun == 'intersect':
-                                    newBlockList = [[bedops.a.start, bedops.a.end]]
-                                else:
-                                    newBlockList[0] = [bedops.a.start, bedops.a.end]
+                                ## for merge
+                                newBlockList[0] = [bedops.a.start, bedops.a.end]
                         elif overlapIndex == (b1len - 1):
                             ## overlap with last block of a
                             if self.__part is False:
                                 if block1List[-1][0] != block2List[0][0]:
                                     raise SystemError("block left edges should be the same when tx mode is on".format(self.__fun))
                             else:
-                                if self.__fun == 'intersect':
-                                    newBlockList = [[bedops.a.start, bedops.a.end]]
-                                else:
-                                    newBlockList[-1] = [bedops.a.start, bedops.a.end]
+                                ## for merge
+                                newBlockList[-1] = [bedops.a.start, bedops.a.end]
                         else:
                             ## ignore the internal overlap block to keep the transcript structure
                             if block1List[overlapIndex][0] <= block2List[0][0] and block2List[0][1] <= block1List[overlapIndex][1]:
